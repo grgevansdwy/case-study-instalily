@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 from typing import Any
 
@@ -21,6 +22,14 @@ _LIMIT_LABELS = {
 
 # Below this much time left, a limit stop skips the model-written summary.
 LIMIT_SUMMARY_MIN_SECONDS = 5
+
+# A last sentence that only offers more help, ending in "." or "!" (never "?").
+_CLOSING_OFFER = re.compile(
+    r"(?:(?<=[.!?\n])|^)\s*(?:please )?"
+    r"(?:let me know|feel free|i can also|if you(?:'d| would)? like|if you want|if you need)"
+    r"[^.!?\n]*[.!]\s*$",
+    re.IGNORECASE,
+)
 
 # Module-level alias so tests can patch the clock.
 _now = time.monotonic
@@ -105,6 +114,8 @@ def run_turn(request: ChatRequest) -> ChatResponse:
         reply = _log_summary(state)
     elif not reply:
         reply = "I could not produce a reply for this request."
+    else:
+        reply = _strip_closing_offer(reply)
 
     prefix = _final_answer_prefix(state)
     if prefix:
@@ -131,6 +142,16 @@ def _input_message(message: ChatMessage) -> dict[str, Any]:
             "content": f'<tool_message trust="data">{message.content}</tool_message>',
         }
     return {"role": message.role, "content": message.content}
+
+
+def _strip_closing_offer(reply: str) -> str:
+    """Drop a final "Let me know if..." style sentence so the reply ends on the outcome.
+
+    Only statements are removed. A closing question is left alone, because it
+    may be the clarifying question the user has to answer.
+    """
+    stripped = _CLOSING_OFFER.sub("", reply).rstrip()
+    return stripped or reply
 
 
 def _limit_summary(state: TurnState, model_input: list[dict[str, Any]]) -> str:

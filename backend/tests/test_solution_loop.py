@@ -312,6 +312,21 @@ class HonestyTests(unittest.TestCase):
             [call["error"] is None for call in payload["tool_calls"]], [False, True]
         )
 
+    def test_closing_offer_is_removed_but_a_closing_question_is_kept(self) -> None:
+        cases = {
+            "You have 4 conversations.\n\nLet me know if you want details on any of them.":
+                "You have 4 conversations.",
+            "I found the folder. Feel free to ask for more!": "I found the folder.",
+            "I found two channels named leadership. Which one should I post to?":
+                "I found two channels named leadership. Which one should I post to?",
+            "Posted. Would you like me to pin it?": "Posted. Would you like me to pin it?",
+            "Let me know if you need anything.": "Let me know if you need anything.",
+        }
+        for written, expected in cases.items():
+            model = ScriptedClient([text_response(written)])
+            payload = self.post(model, "hello")
+            self.assertEqual(payload["messages"][-1]["content"], expected)
+
     def test_failed_read_alone_gets_no_prefix(self) -> None:
         model = ScriptedClient(
             [

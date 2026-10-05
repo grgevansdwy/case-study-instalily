@@ -39,6 +39,7 @@ C1 What must never go wrong? · C2 How fast must it respond? · C3 What volume a
 | D29 | Unexpected error: code retries a read once; a write is never retried by code | Active | 2026-10-05 |
 | D30 | Limit stop: model-written summary under a fixed prefix, log summary as fallback | Active | 2026-10-05 |
 | D31 | Bulk tools need per-tool keywords in the last user message, matched as whole words | Active | 2026-10-05 |
+| D32 | Closing offers: prompt rule plus a code strip of "Let me know if..." statements; closing questions are left alone | Active | 2026-10-05 |
 
 ---
 
@@ -472,6 +473,20 @@ C1 What must never go wrong? · C2 How fast must it respond? · C3 What volume a
 - **Reason:** As a substring, "all" matches "call" and "install", which would let a bulk action through on an unrelated request. The exact phrase "delete the calendar" would block "delete my Team calendar".
 - **Reversible:** Easy; data only.
 - **Revisit when:** A clearly requested bulk action is blocked.
+- **Replaces:** none
+
+---
+
+## D32: Closing offers: prompt rule plus a code strip of "Let me know if..." statements; closing questions are left alone
+- **Date:** 2026-10-05
+- **Status:** Active
+- **Source:** Agent
+- **Constraint:** C7
+- **Options:** Prompt rule only / also strip closing offers in code, statements only / also strip closing "Would you like me to...?" questions
+- **Choice:** The agent prompt forbids closing offers and gives two example answers. `loop._strip_closing_offer` removes a final sentence that starts with "Let me know", "Feel free", "I can also", "If you'd like", "If you want" or "If you need" and ends in "." or "!". A reply ending in "?" is never changed.
+- **Reason:** With the prompt rule alone, `gpt-4.1-mini` still closed 3 to 5 of 15 live replies with "Let me know if...". The strip removes those every time. A closing question cannot be told apart in code from a clarifying question the user must answer, and removing one of those would break the ambiguous scenarios.
+- **Reversible:** Easy; one function and one pattern.
+- **Revisit when:** Measured at 3 repeats after the change: the Q3-budget reply still ended with "Would you like me to post there anyway?" in 2 of 3 runs. Fix by prompt or a stronger agent model, not by stripping questions.
 - **Replaces:** none
 
 ---

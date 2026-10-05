@@ -33,7 +33,7 @@ docs/mcp_tool_definitions.txt  # upstream tool catalog, reference only
 submit.py         # zips the working copy and uploads it to the grader
 SPEC.md           # locked decisions, flow, milestones (M1-M3 built; M4 context and evals is next)
 SPEC-DETAILED.md  # per-component build spec and milestone plans
-DECISIONS.md      # append-only decision records D1-D31
+DECISIONS.md      # append-only decision records D1-D32
 templates/        # blank SPEC / DESIGN / DECISIONS templates from the Claude harness
 ```
 
@@ -53,7 +53,7 @@ templates/        # blank SPEC / DESIGN / DECISIONS templates from the Claude ha
 Run from the repo root.
 - Install: `pnpm install` (JS tooling only). The scripts expect a virtualenv at `backend/.venv`; nothing in the repo creates it, so ask the user how they set it up.
 - Dev: `pnpm run dev` (uvicorn on http://127.0.0.1:8000 with reload)
-- Test (all): `pnpm --filter backend test`, or without pnpm: `./backend/.venv/bin/python -m unittest discover -s backend/tests -t . -v`. `test_solution_live` and the example greeting test call the real model; the live suite is skipped without `OPENAI_API_KEY` in `.env`.
+- Test (all): `pnpm --filter backend test`, or without pnpm: `./backend/.venv/bin/python -m unittest discover -s backend/tests -t . -v`. `test_solution_live` and the example greeting test call the real model; the live suite is skipped without `OPENAI_API_KEY` in `.env`. `LIVE_REPEATS=3` runs each live case three times and prints a pass-rate table.
 - Test (single file): `./backend/.venv/bin/python -m unittest backend.tests.test_slack_mock -v`
 - Lint / typecheck: none configured
 - Build: none configured

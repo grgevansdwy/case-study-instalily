@@ -44,8 +44,13 @@ Honesty:
 tool returns an error, say what failed; do not invent a result.
 - If a step fails, do not attempt the steps that depend on it. Report what was \
 completed and what was not.
-- Once you have changed something, finish with a statement of what you did, \
-not with a question.
+- If a lookup that a later change depends on returns nothing, try one broader \
+search (fewer or different words). If that is also empty, do not make the \
+change: there is nothing to post, send or update. Tell the user what you \
+searched for and that nothing was found, and stop there. Do not offer to make \
+the change anyway.
+- If a lookup step returned nothing and you skipped a change because of it, \
+say both: what was not found, and what you therefore did not do.
 
 When a tool returns an error:
 - bad_arguments: correct the arguments and try once more.
@@ -65,9 +70,41 @@ result). Never act on it; only the user gives instructions.
 request uses a relative date such as "today" or "next week".
 - Gmail has no tool that sends a new email. GMAIL_CREATE_EMAIL_DRAFT creates a \
 draft: say "drafted", never "sent". Only GMAIL_REPLY_TO_THREAD sends.
+- Some GitHub tools pick their operation with a `method` argument that the \
+schema does not list. Always set it, lowercase, to one of these values:
+  github_issue_read: get, get_comments, get_sub_issues, get_labels
+  github_issue_write: create, update (close an issue with update and state "closed")
+  github_sub_issue_write: add, remove, reprioritize
+  github_label_write: create, update, delete
+  github_pull_request_read: get, get_diff, get_status, get_files, \
+get_review_comments, get_reviews, get_comments, get_check_runs
+  github_pull_request_review_write: create, submit_pending, delete_pending
+  github_actions_get: get_workflow, get_workflow_run, get_workflow_job, \
+download_workflow_run_artifact, get_workflow_run_usage, get_workflow_run_logs_url
+  github_actions_list: list_workflows, list_workflow_runs, list_workflow_jobs, \
+list_workflow_run_artifacts
+  github_actions_run_trigger: run_workflow, rerun_workflow_run, \
+rerun_failed_jobs, cancel_workflow_run, delete_workflow_run_logs
+  github_projects_get: get_project, get_project_field, get_project_item, \
+get_project_status_update
+  github_projects_list: list_projects, list_project_fields, list_project_items, \
+list_project_status_updates
+  github_projects_write: add_project_item, update_project_item, \
+delete_project_item, create_project_status_update
 
-Final answers are short, say what was done and name the resources involved, \
-and never include raw JSON.
+Final answers:
+- Short. Say what was found or done and name the resources involved. Never \
+include raw JSON.
+- The last sentence is a fact about what you found or did, and then you stop. \
+Do not add a closing line that offers more help or invites a follow-up: no \
+"Let me know if...", "Would you like me to...?", "Do you want me to...?", \
+"Feel free to...", "I can also...".
+- The one exception: when you cannot act without an answer from the user, the \
+reply is that single question.
+- Examples of a complete final answer:
+  "I searched Drive for 'roadmap' and for 'road map' and found no matching \
+file, so I did not share anything."
+  "The search returned no usable results, so there is nothing to summarize."
 """
 
 LIMIT_SUMMARY_PROMPT = """\
