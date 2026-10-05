@@ -1,18 +1,20 @@
 from __future__ import annotations
 
 from backend.chat_schema import ChatRequest, ChatResponse
+from backend.helpers.llm import ProviderError
+from backend.helpers.loop import run_turn
 from fastapi import HTTPException
 
 
 def chat(request: ChatRequest) -> ChatResponse:
-    """Stub endpoint. Implement this.
+    """Run one chat turn: pick tools, run the agent loop, return the reply and log.
 
-    Accept the conversation in `request.messages`, decide which (if any)
-    of the registered tools to call, run them, and return the final
-    assistant turn appended to `messages`. Populate `tool_calls` with an
-    ordered log of every tool invocation made during this turn so the
-    reviewer can see how the system reasoned.
-
-    See README.md for the full task description and scenarios.
+    The loop lives in `backend.helpers.loop.run_turn`. A provider failure before
+    any tool ran is the only case that is not a 200.
     """
-    raise HTTPException(status_code=501, detail="POST /chat is not implemented yet.")
+    try:
+        return run_turn(request)
+    except ProviderError as exc:
+        raise HTTPException(
+            status_code=503, detail=f"Model provider unavailable: {exc}"
+        ) from exc

@@ -21,7 +21,7 @@ Latency and tool-call count (vs. the minimum a task needs) are tracked but not g
 ```
 backend/
   solution.py     # the chat() handler for POST /chat: implement here
-  helpers/        # supporting modules for solution.py
+  helpers/        # supporting modules for solution.py: config, llm, executor, loop, prompts
   chat_schema.py  # ChatRequest / ChatResponse / ToolCallLog wire models
   main.py         # FastAPI wiring, combined tool registry, /health /tools /reset /state
   tooling.py      # ToolSpec / ToolDefinition, builds args models and docstrings
@@ -31,11 +31,16 @@ backend/
   tests/          # unittest suite
 docs/mcp_tool_definitions.txt  # upstream tool catalog, reference only
 submit.py         # zips the working copy and uploads it to the grader
+SPEC.md           # locked decisions, flow, milestones (M1 built; M2 routing is next)
+SPEC-DETAILED.md  # per-component build spec and milestone plans
+DECISIONS.md      # append-only decision records D1-D17
 templates/        # blank SPEC / DESIGN / DECISIONS templates from the Claude harness
 ```
 
 ### Key modules
-- `backend/solution.py`: `chat(request: ChatRequest) -> ChatResponse`, registered at `POST /chat` by `main.py`.
+- `backend/solution.py`: `chat(request: ChatRequest) -> ChatResponse`, registered at `POST /chat` by `main.py`. Delegates to `helpers.loop.run_turn`; returns 503 only when the provider fails before any tool ran.
+- `backend/helpers/executor.py`: `run_tool()` is the only path to a tool; it logs to `tool_calls`. `helpers/llm.py`: `get_client()` is the seam tests patch with `tests/fakes.ScriptedClient`. Model calls use the OpenAI Responses API.
+- `backend/helpers/loop.py`: uses a fixed `FIXED_TOOLS` list until the M2 router replaces it.
 - `backend/main.py`: `get_tool_spec(name).invoke(**args)` calls a tool in-process; `get_openai_tools(names)` returns OpenAI strict-mode function schemas for a subset; `list_available_tools()`, `get_tool_catalog()`, `reset_all_mock_state()`.
 - `backend/chat_schema.py`: `ToolCallLog` has `name`, `arguments`, `result`, `error`.
 - `backend/<service>_mock/tools.py`: tool functions plus the `ToolDefinition` list. Each service raises its own `*MockError(ValueError)` on bad input or a missing resource.
@@ -46,8 +51,8 @@ templates/        # blank SPEC / DESIGN / DECISIONS templates from the Claude ha
 Run from the repo root.
 - Install: `pnpm install` (JS tooling only). The scripts expect a virtualenv at `backend/.venv`; nothing in the repo creates it, so ask the user how they set it up.
 - Dev: `pnpm run dev` (uvicorn on http://127.0.0.1:8000 with reload)
-- Test (all): `pnpm --filter backend test` (unverified: no `backend/.venv` at install time)
-- Test (single file): `./backend/.venv/bin/python -m unittest backend.tests.test_slack_mock -v` (unverified)
+- Test (all): `pnpm --filter backend test`, or without pnpm: `./backend/.venv/bin/python -m unittest discover -s backend/tests -t . -v`. One test makes a live model call, so it needs `OPENAI_API_KEY` in `.env`.
+- Test (single file): `./backend/.venv/bin/python -m unittest backend.tests.test_slack_mock -v`
 - Lint / typecheck: none configured
 - Build: none configured
 - CLI against a running server: `pnpm run cli -- chat "<prompt>"`, `pnpm run cli -- tools --service slack`, `pnpm run cli -- state`, `pnpm run cli -- reset`
@@ -58,6 +63,7 @@ Run from the repo root.
 - Every tool invoked during a turn must be appended to `ChatResponse.tool_calls` in call order, with the exact arguments passed and the result returned. On failure set `error` to the message and `result` to null. This log is what gets scored.
 - Tool-name casing differs by service: Gmail, Google Calendar and Google Drive are UPPERCASE (`GMAIL_FETCH_EMAILS`), while Slack, Linear, GitHub and Perplexity are lowercase (`slack_list_conversations`). Always use the exact registered name from `list_available_tools()`; never normalize case.
 - `get_openai_tools()` emits strict-mode schemas where every property is in `required`; the model passes null for unused optionals.
+- Helpers import from `backend.main` inside functions, never at module top: `main.py` imports `solution.py` at load, so a top-level import is circular.
 - Imports are absolute from the repo root (`from backend.chat_schema import ...`), and every module starts with `from __future__ import annotations`.
 - Tests are `unittest.TestCase` classes using `TestClient(app)`; follow `backend/tests/test_solution_example.py`.
 
