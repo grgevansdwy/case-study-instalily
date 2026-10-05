@@ -291,3 +291,7 @@ cython_debug/
 .idea/
 
 /.pnpm-store/
+
+# Personal Claude files
+CLAUDE.local.md
+.claude/settings.local.json
