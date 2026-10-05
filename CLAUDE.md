@@ -21,7 +21,7 @@ Latency and tool-call count (vs. the minimum a task needs) are tracked but not g
 ```
 backend/
   solution.py     # the chat() handler for POST /chat: implement here
-  helpers/        # supporting modules for solution.py: config, llm, executor, loop, prompts
+  helpers/        # supporting modules for solution.py: config, llm, catalog, router, executor, loop, prompts
   chat_schema.py  # ChatRequest / ChatResponse / ToolCallLog wire models
   main.py         # FastAPI wiring, combined tool registry, /health /tools /reset /state
   tooling.py      # ToolSpec / ToolDefinition, builds args models and docstrings
@@ -31,16 +31,18 @@ backend/
   tests/          # unittest suite
 docs/mcp_tool_definitions.txt  # upstream tool catalog, reference only
 submit.py         # zips the working copy and uploads it to the grader
-SPEC.md           # locked decisions, flow, milestones (M1 built; M2 routing is next)
+SPEC.md           # locked decisions, flow, milestones (M1-M3 built; M4 context and evals is next)
 SPEC-DETAILED.md  # per-component build spec and milestone plans
-DECISIONS.md      # append-only decision records D1-D17
+DECISIONS.md      # append-only decision records D1-D31
 templates/        # blank SPEC / DESIGN / DECISIONS templates from the Claude harness
 ```
 
 ### Key modules
 - `backend/solution.py`: `chat(request: ChatRequest) -> ChatResponse`, registered at `POST /chat` by `main.py`. Delegates to `helpers.loop.run_turn`; returns 503 only when the provider fails before any tool ran.
 - `backend/helpers/executor.py`: `run_tool()` is the only path to a tool; it logs to `tool_calls`. `helpers/llm.py`: `get_client()` is the seam tests patch with `tests/fakes.ScriptedClient`. Model calls use the OpenAI Responses API.
-- `backend/helpers/loop.py`: uses a fixed `FIXED_TOOLS` list until the M2 router replaces it.
+- `backend/helpers/router.py`: `select_tools()` makes one model call over the compact index in `helpers/catalog.py` and returns up to 15 validated names; `load_more_tools` (a meta-tool handled in `run_tool`, never logged) raises that to 25. `catalog.py` also holds the hand-reviewed read/write/destructive class table and the grounding rules.
+- `backend/helpers/loop.py`: `run_turn()`. Never call `get_openai_tools([])`: an empty list returns all 191 schemas, so `_tool_schemas` guards it.
+- `backend/tests/fakes.py`: `ScriptedClient(script, router=...)` scripts agent and router calls separately (`.requests` vs `.router_requests`).
 - `backend/main.py`: `get_tool_spec(name).invoke(**args)` calls a tool in-process; `get_openai_tools(names)` returns OpenAI strict-mode function schemas for a subset; `list_available_tools()`, `get_tool_catalog()`, `reset_all_mock_state()`.
 - `backend/chat_schema.py`: `ToolCallLog` has `name`, `arguments`, `result`, `error`.
 - `backend/<service>_mock/tools.py`: tool functions plus the `ToolDefinition` list. Each service raises its own `*MockError(ValueError)` on bad input or a missing resource.
@@ -51,7 +53,7 @@ templates/        # blank SPEC / DESIGN / DECISIONS templates from the Claude ha
 Run from the repo root.
 - Install: `pnpm install` (JS tooling only). The scripts expect a virtualenv at `backend/.venv`; nothing in the repo creates it, so ask the user how they set it up.
 - Dev: `pnpm run dev` (uvicorn on http://127.0.0.1:8000 with reload)
-- Test (all): `pnpm --filter backend test`, or without pnpm: `./backend/.venv/bin/python -m unittest discover -s backend/tests -t . -v`. One test makes a live model call, so it needs `OPENAI_API_KEY` in `.env`.
+- Test (all): `pnpm --filter backend test`, or without pnpm: `./backend/.venv/bin/python -m unittest discover -s backend/tests -t . -v`. `test_solution_live` and the example greeting test call the real model; the live suite is skipped without `OPENAI_API_KEY` in `.env`.
 - Test (single file): `./backend/.venv/bin/python -m unittest backend.tests.test_slack_mock -v`
 - Lint / typecheck: none configured
 - Build: none configured

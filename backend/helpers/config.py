@@ -40,6 +40,8 @@ OPENAI_MODEL = os.environ.get("OPENAI_MODEL") or "gpt-4.1-mini"
 OPENAI_ROUTER_MODEL = os.environ.get("OPENAI_ROUTER_MODEL") or "gpt-4.1-mini"
 CHAT_MAX_TURNS = _int_env("CHAT_MAX_TURNS", 12)
 CHAT_TIME_BUDGET_S = _int_env("CHAT_TIME_BUDGET_S", 60)
+CHAT_ROUTER_MAX_TOOLS = _int_env("CHAT_ROUTER_MAX_TOOLS", 15)
+CHAT_MAX_ACTIVE_TOOLS = _int_env("CHAT_MAX_ACTIVE_TOOLS", 25)
 
 # Per model call, further limited by the time left in the turn.
 MODEL_CALL_TIMEOUT_S = 30

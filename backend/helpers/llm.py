@@ -27,9 +27,14 @@ def call_model(
     input: list[dict[str, Any]],
     tools: list[dict[str, Any]],
     timeout: float,
+    text: dict[str, Any] | None = None,
 ) -> Any:
-    """One Responses API call. The caller owns the input list (`store=False`)."""
+    """One Responses API call. The caller owns the input list (`store=False`).
+
+    `text` is the structured-output format; only the router passes it.
+    """
     client = get_client()
+    extra = {"text": text} if text is not None else {}
     try:
         return client.responses.create(
             model=model,
@@ -39,6 +44,7 @@ def call_model(
             store=False,
             temperature=0,
             timeout=timeout,
+            **extra,
         )
     except openai.OpenAIError as exc:
         raise ProviderError(f"{type(exc).__name__}: {exc}") from exc

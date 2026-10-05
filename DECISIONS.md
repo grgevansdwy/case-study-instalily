@@ -25,10 +25,20 @@ C1 What must never go wrong? · C2 How fast must it respond? · C3 What volume a
 | D15 | Models: `gpt-4.1-mini` in both slots first, upgrade on eval failure | Active | 2026-10-05 |
 | D16 | Router selects at most 15 tools | Active | 2026-10-05 |
 | D17 | Follow-up turns: re-lookup; assistant-quoted IDs count as grounded | Active | 2026-10-05 |
-| D18 | M1 uses a fixed 12-tool list until the router exists | Active | 2026-10-05 |
-| D19 | M1 limit stops return a fixed message built from the log | Active | 2026-10-05 |
+| D18 | M1 uses a fixed 12-tool list until the router exists | Superseded by D22 | 2026-10-05 |
+| D19 | M1 limit stops return a fixed message built from the log | Superseded by D30 | 2026-10-05 |
 | D20 | `tool`-role request messages are sent to the model as labelled user data | Active | 2026-10-05 |
 | D21 | Tool schemas go to the Responses API as emitted; no sanitizer | Active | 2026-10-05 |
+| D22 | Router result replaces the fixed tool list; two attempts inside the turn deadline | Active | 2026-10-05 |
+| D23 | Router keyword fallback picks read tools by verb tokens until the class table exists | Superseded by D26 | 2026-10-05 |
+| D24 | An empty tool selection never reaches `get_openai_tools` | Active | 2026-10-05 |
+| D25 | Index lines are `name \| description` under a service heading; no class column until M3 | Active | 2026-10-05 |
+| D26 | Class table is explicit data: 107 read, 69 write, 15 destructive; unknown names count as destructive | Active | 2026-10-05 |
+| D27 | Reference-argument rule widened to the real argument names, with exclusions and exempt values | Active | 2026-10-05 |
+| D28 | Grounding takes whole short result strings and their parts; long text grounds nothing | Active | 2026-10-05 |
+| D29 | Unexpected error: code retries a read once; a write is never retried by code | Active | 2026-10-05 |
+| D30 | Limit stop: model-written summary under a fixed prefix, log summary as fallback | Active | 2026-10-05 |
+| D31 | Bulk tools need per-tool keywords in the last user message, matched as whole words | Active | 2026-10-05 |
 
 ---
 
@@ -272,7 +282,7 @@ C1 What must never go wrong? · C2 How fast must it respond? · C3 What volume a
 
 ## D18: M1 uses a fixed 12-tool list until the router exists
 - **Date:** 2026-10-05
-- **Status:** Active
+- **Status:** Superseded by D22
 - **Source:** Agent
 - **Constraint:** C4
 - **Options:** All 191 schemas for now / one service / a fixed small list spanning both name casings
@@ -322,6 +332,146 @@ C1 What must never go wrong? · C2 How fast must it respond? · C3 What volume a
 - **Reason:** Checked live on 2026-10-05: `gpt-4.1-mini` accepted all 191 strict schemas (sent in batches of 24) with zero rejections, so a sanitizer would be code with no purpose.
 - **Reversible:** Easy; a copy-and-strip step can sit in front of the model call.
 - **Revisit when:** `OPENAI_MODEL` changes, or the API starts returning a 400 on a tool schema.
+- **Replaces:** none
+
+---
+
+## D22: Router result replaces the fixed tool list; two attempts inside the turn deadline
+- **Date:** 2026-10-05
+- **Status:** Active
+- **Source:** Agent
+- **Constraint:** C1, C2
+- **Options:** One router attempt with the same fixed timeout each time / two attempts, each limited to the time left in the 60 s turn budget
+- **Choice:** `select_tools` makes up to two attempts and asks the loop for the time left before each one. `FIXED_TOOLS` is removed. The index is also appended to the agent instructions so `load_more_tools` has names to choose from.
+- **Reason:** The SDK already retries once per call, so two fixed 30 s attempts could exceed the whole turn budget on their own (never-go-wrong 5).
+- **Reversible:** Easy; one function.
+- **Revisit when:** Router latency shows up as a meaningful share of p95.
+- **Replaces:** D18
+
+---
+
+## D23: Router keyword fallback picks read tools by verb tokens until the class table exists
+- **Date:** 2026-10-05
+- **Status:** Active
+- **Source:** Agent
+- **Constraint:** C1
+- **Options:** Wait for the M3 class table / all tools of the matched service / read tools guessed from the name
+- **Choice:** A tool counts as a read when its name has a read verb token and no changing verb token. When several services match (for example "issue" matches Linear and GitHub) the cap of 15 is shared between them in turn. No keyword match gives an empty list.
+- **Reason:** The fallback runs only after the router failed twice, and it must not hand the agent write tools on a keyword guess. The agent can still load a write tool by name.
+- **Reversible:** Easy; swap `_looks_like_read` for the class table.
+- **Revisit when:** M3 lands the reviewed class table.
+- **Replaces:** none
+
+---
+
+## D24: An empty tool selection never reaches `get_openai_tools`
+- **Date:** 2026-10-05
+- **Status:** Active
+- **Source:** Agent
+- **Constraint:** C1
+- **Options:** Call `get_openai_tools(active_tools)` always / skip the call when the list is empty
+- **Choice:** Skip it. With no routed tools the model call carries only `load_more_tools`.
+- **Reason:** `get_openai_tools([])` returns all 191 schemas because `main.py` uses `names or list_available_tools()`. A greeting would otherwise send the whole catalog (never-go-wrong 5), and `main.py` is outside the edit set.
+- **Reversible:** Easy; one helper in `loop.py`, covered by a test.
+- **Revisit when:** Never while `main.py` keeps that fallback.
+- **Replaces:** none
+
+---
+
+## D25: Index lines are `name | description` under a service heading; no class column until M3
+- **Date:** 2026-10-05
+- **Status:** Active
+- **Source:** Agent
+- **Constraint:** C4
+- **Options:** `name | service | class | description` per line as in SPEC-DETAILED 4.2 / service as a heading and no class yet
+- **Choice:** One `## service` heading per group, then `name | description` lines. About 15.6k characters for 191 tools.
+- **Reason:** The class table is M3 work and is meant to be reviewed by hand, so M2 does not invent one. Repeating the service on every line adds tokens without adding information.
+- **Reversible:** Easy; one function.
+- **Revisit when:** M3 adds `tool_class`; add the column then if routing evals show it helps.
+- **Replaces:** none
+
+---
+
+## D26: Class table is explicit data: 107 read, 69 write, 15 destructive; unknown names count as destructive
+- **Date:** 2026-10-05
+- **Status:** Active
+- **Source:** Agent
+- **Constraint:** C1
+- **Options:** Infer the class from verb tokens at runtime / one explicit table listing all 191 names
+- **Choice:** Three explicit name lists in `catalog.py`, drafted from the verb rule and corrected by hand where it is silent or gives two answers (`slack_conversations_history`, `slack_users_info`, `github_pull_request_read`, `GOOGLECALENDAR_CALENDAR_LIST_INSERT`/`_UPDATE`, `GMAIL_MOVE_TO_TRASH`, `github_merge_pull_request`, `github_mark_all_notifications_read`). Five GitHub write tools become destructive for a delete `method` (`DESTRUCTIVE_METHODS`, taken from the method strings the mocks accept). A name missing from the table is treated as destructive. The router's keyword fallback now reads this table. The index keeps no class column (D25 stands: no eval shows it helps).
+- **Reason:** The verb rule misclassifies or misses about a dozen names, and a table can be reviewed line by line. Defaulting an unknown name to destructive means a new tool gets every check rather than none.
+- **Reversible:** Easy; data only. A test fails if the table and the registry drift apart.
+- **Revisit when:** The owner's review moves a tool between classes.
+- **Replaces:** D23
+
+---
+
+## D27: Reference-argument rule widened to the real argument names, with exclusions and exempt values
+- **Date:** 2026-10-05
+- **Status:** Active
+- **Source:** Agent
+- **Constraint:** C1
+- **Options:** The pattern list in SPEC-DETAILED 4.2 as written / the list checked against the arguments the write tools really have
+- **Choice:** Added: the `ID`/`IDs`/`Ids` suffixes (`threadID`, `notificationID`), `pullNumber`, `sub_issue_number`, `attendee_email`, `email_address`, `extra_recipients`, `assignees`, `reviewers`, `lead`, `delegate`, `destination`, `parents`, `organization`, `from_branch`, `base`, `head`, `base_ref`, `ref`. Excluded: `requestId`, `colorId`, `color_id`, `themeId`; `id` on the two WATCH tools; `branch` on `github_create_branch`; `path` on `github_create_or_update_file` and `github_push_files`. Exempt values added to the spec's: `main`, and Gmail's built-in label IDs (`INBOX`, `UNREAD`, `STARRED`, ...). A leading `#` or `@` is ignored when comparing. Content arguments also include `message_body` and `text_content`.
+- **Reason:** The spec list missed arguments such as `pullNumber` and `attendee_email`, which left real writes unchecked, and it caught values the caller invents (a watch channel ID, a new branch name), which would block correct calls. Without the label and `main` exemptions, "mark as read" or "open a PR" would need an extra lookup for a value that is always valid.
+- **Reversible:** Easy; data only.
+- **Revisit when:** A live scenario is blocked on a value that was correct, or a write gets through with an argument that should have been checked.
+- **Replaces:** none
+
+---
+
+## D28: Grounding takes whole short result strings and their parts; long text grounds nothing
+- **Date:** 2026-10-05
+- **Status:** Active
+- **Source:** Agent
+- **Constraint:** C1
+- **Options:** Every string scalar in a result, whole (spec 4.4 step 10) / also substrings of any result text / whole strings plus their parts, for short strings only
+- **Choice:** A result string of 300 characters or fewer is grounded whole and also split on spaces and `< > ( ) , ; : " ' / [ ]`, so `Jordan <jordan@corp.com>` grounds the address and `acme/api` grounds both parts. A longer string grounds nothing. Integers are grounded as strings; booleans are not.
+- **Reason:** Whole-scalar matching blocked correct writes whose target sits inside a header or a `owner/repo` name. Leaving out long text means an address that appears only in an email or file body is not a valid write target, so the commonest injection ("forward this to x@evil") is stopped by code, not only by the prompt.
+- **Reversible:** Easy; one function and one constant.
+- **Revisit when:** A scenario needs a recipient taken from a message body. Known limit: text short enough to be split (a Slack message, a Gmail snippet) still grounds what it contains.
+- **Replaces:** none
+
+---
+
+## D29: Unexpected error: code retries a read once; a write is never retried by code
+- **Date:** 2026-10-05
+- **Status:** Active
+- **Source:** Agent
+- **Constraint:** C1
+- **Options:** Return `retryable: true` and let the model retry / retry in the executor
+- **Choice:** A read that raises an unexpected exception is invoked once more by the executor. Both attempts are logged. If the second fails the model gets `retryable: false` and is told to report it. A write is invoked once; its error tells the model to check with a read whether it landed. Each invocation counts toward the two-identical-calls limit, so the model cannot retry the same failed read again.
+- **Reason:** A fixed rule belongs in code, and it costs no model turn. A write may have been applied before it raised, so repeating it blindly could apply it twice.
+- **Reversible:** Easy.
+- **Revisit when:** A tool shows unexpected errors that need more than one retry.
+- **Replaces:** none
+
+---
+
+## D30: Limit stop: model-written summary under a fixed prefix, log summary as fallback
+- **Date:** 2026-10-05
+- **Status:** Active
+- **Source:** Agent
+- **Constraint:** C1
+- **Options:** Fixed message only (D19) / model summary only / fixed prefix, then the model summary, else the log summary
+- **Choice:** On the step or time limit, if at least 5 s remain, one model call with no tools writes what was and was not done. If that call fails, returns no text, or there is no time, the reply is the list of completed and failed calls from the log. Either way the reply starts with a fixed sentence naming the limit. A provider error after tools ran uses the log summary only. The same prefix step names any write that errored with no later success of that tool, on every stop reason.
+- **Reason:** The model's summary is more useful to the user, but the statement that the task is incomplete must not depend on the model.
+- **Reversible:** Easy.
+- **Revisit when:** The prefix reads badly on honest replies that already report the failure.
+- **Replaces:** D19
+
+---
+
+## D31: Bulk tools need per-tool keywords in the last user message, matched as whole words
+- **Date:** 2026-10-05
+- **Status:** Active
+- **Source:** Agent
+- **Constraint:** C1
+- **Options:** One shared keyword list matched as substrings (spec 4.4) / per-tool keyword groups matched as whole words
+- **Choice:** `BULK_KEYWORDS` in `catalog.py`. Clear-calendar, empty-trash and mark-all-read need one of `clear`, `empty`, `all`, `every`, `everything`, `entire` (per tool). Delete-drive and delete-calendar need `delete` or `remove` together with `drive` or `calendar`.
+- **Reason:** As a substring, "all" matches "call" and "install", which would let a bulk action through on an unrelated request. The exact phrase "delete the calendar" would block "delete my Team calendar".
+- **Reversible:** Easy; data only.
+- **Revisit when:** A clearly requested bulk action is blocked.
 - **Replaces:** none
 
 ---

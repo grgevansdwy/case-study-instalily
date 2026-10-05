@@ -26,28 +26,55 @@ def calls_response(calls: list[tuple[str, Any]], *, prefix: str = "call") -> Sim
     return SimpleNamespace(output=output, output_text="")
 
 
+def router_response(names: list[str]) -> SimpleNamespace:
+    """The router's structured output: a JSON object holding tool names."""
+    return text_response(json.dumps({"tools": names}))
+
+
 class ScriptedClient:
     """Records every request and replays scripted responses.
 
-    `script` is a list consumed in order, or a function of the request index for
-    an endless script. An item that is an exception is raised instead of returned.
+    `script` drives the agent calls: a list consumed in order, or a function of
+    the request index for an endless script. An item that is an exception is
+    raised instead of returned.
+
+    `router` drives the router calls (the requests that carry a `text` format):
+    a list of tool names returned every time, or a function of the router
+    request index returning a response or an exception. The default selects no
+    tools. Agent requests are kept in `requests`, router requests in
+    `router_requests`.
     """
 
-    def __init__(self, script: list[Any] | Callable[[int], Any]) -> None:
+    def __init__(
+        self,
+        script: list[Any] | Callable[[int], Any],
+        router: list[str] | Callable[[int], Any] | None = None,
+    ) -> None:
         self._script = script
+        self._router = router
         self.requests: list[dict[str, Any]] = []
+        self.router_requests: list[dict[str, Any]] = []
         self.responses = SimpleNamespace(create=self._create)
 
     def _create(self, **kwargs: Any) -> Any:
-        index = len(self.requests)
         # The loop keeps appending to its input list, so snapshot it.
-        self.requests.append({**kwargs, "input": list(kwargs.get("input", []))})
-        if callable(self._script):
-            item = self._script(index)
-        elif index < len(self._script):
-            item = self._script[index]
+        request = {**kwargs, "input": list(kwargs.get("input", []))}
+        if "text" in kwargs:
+            index = len(self.router_requests)
+            self.router_requests.append(request)
+            if callable(self._router):
+                item = self._router(index)
+            else:
+                item = router_response(list(self._router or []))
         else:
-            raise AssertionError(f"ScriptedClient ran out of responses at request {index}")
+            index = len(self.requests)
+            self.requests.append(request)
+            if callable(self._script):
+                item = self._script(index)
+            elif index < len(self._script):
+                item = self._script[index]
+            else:
+                raise AssertionError(f"ScriptedClient ran out of responses at request {index}")
         if isinstance(item, Exception):
             raise item
         return item
